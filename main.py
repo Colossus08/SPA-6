@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from fastapi import FastAPI
 import os
 
+# password has been set as an environment variable
 database_password=os.environ['Password']
 
 app = FastAPI()
@@ -15,11 +16,13 @@ cnx = mysql.connector.connect(
     database="api"
 )
 
+# this may seem useless but its useful to validate the data that is being entered. may prove to be useful when using post
 class Item(BaseModel):
     time: str
     monday:str
     tuesday:str
 
+# get request returns entire database for now
 @app.get("/")
 def read_root():
     cursor = cnx.cursor()

@@ -19,23 +19,37 @@ cnx = mysql.connector.connect(
 )
 
 # this may seem useless but its useful to validate the data that is being entered. may prove to be useful when using post
-class Item(BaseModel):
+class POST(BaseModel):
     time: str
     day:str
     new:str
 
+class GET(BaseModel):
+    full: bool
+    day: str
+
 # get request returns entire database for now
 @app.get("/btech/cse/sy/get")
-def get_timetable():
+def get_timetable(getting:GET):
     cursor = cnx.cursor()
-    cursor.execute("SELECT * FROM {table_name}".format(table_name=table_name))
-    result = cursor.fetchall()
+    if getting.full:
+        cursor.execute("SELECT * FROM {table_name}".format(table_name=table_name))
+        result = cursor.fetchall()
+        return result
+    else:
+        cursor.execute("SELECT {day} FROM {table_name}".format(day=getting.day,table_name=table_name))
+        result = cursor.fetchall()
+        return result
+
+@app.get("/btech/cse/sy/get/{weekday}")
+def get_timetable_day(weekday):
+    cursor=cnx.cursor()
+    cursor.execute('Select {day} from {table_name}'.format(table_name=table_name,day=weekday))
+    result=cursor.fetchall()
     return result
 
-
-
 @app.post('/btech/cse/sy/post')
-def post_timetable(change:Item):
+def post_timetable(change:POST):
     cursor=cnx.cursor()
     update_query="update {table_name} set {day} = '{new}' where time={time}".format(day=change.day,table_name=table_name,time=change.time,new=change.new)
     cursor.execute(update_query)

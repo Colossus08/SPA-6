@@ -5,8 +5,18 @@ import st7789py as st7789
 from st7789py import color565
 import vga2_bold_16x16 as font
 
+# Wi Fi Code
+import network
+sta_if = network.WLAN(network.STA_IF)
+sta_if.active(True)
+sta_if.connect(ssid='lan_the_man',key='simplepassword')
+
+
+
+
 #initialize display
 spi = SPI(2, baudrate=30000000, polarity=1, phase=1, sck=Pin(18), mosi=Pin(23), miso=Pin(14))
+
 display = st7789.ST7789(
     spi, 135, 240,
     reset     = Pin(4, Pin.OUT),

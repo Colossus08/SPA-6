@@ -1,26 +1,43 @@
+#machine and time related imports
 from machine import RTC, Pin, SPI
 import time
 import ntptime1 as ntptime
+
+#driver imports
 import st7789py as st7789
 from st7789py import color565
-import vga2_bold_16x16 as font
 
-# Wi Fi Codes
+#font imports
+import vga2_bold_16x16 as font
+import vga1_bold_16x32 as font1
+import vga1_8x8 as font2
+import vga1_8x16 as font3
+import NotoSans as mainfont
+
+#wifi imports
 import urequests as requests
 import network
+
+
+#connect to wifi
 sta_if = network.WLAN(network.STA_IF)
 sta_if.active(True)
-sta_if.connect('lan_the_man','simplepassword')
-
 wifi_connected = sta_if.isconnected()
 
-print(wifi_connected)
-
+while True:
+    try:
+        sta_if.connect('lan_the_man','simplepassword')
+    except OSError as e:
+        print(e)
+        sta_if.disconnect()
+    time.sleep(0.5)
+    if wifi_connected:
+        print("Connected")
+        break
 
 
 #initialize display
 spi = SPI(2, baudrate=30000000, polarity=1, phase=1, sck=Pin(18), mosi=Pin(23), miso=Pin(14))
-
 display = st7789.ST7789(
     spi, 135, 240,
     reset     = Pin(4, Pin.OUT),
@@ -30,19 +47,126 @@ display = st7789.ST7789(
     rotation  = 1
     )
 
-#pins
+#pins for buttons
 up_button = Pin(26, Pin.IN)
 down_button = Pin(27, Pin.IN)
 select_button = Pin(13, Pin.IN)
 home_button = Pin(12, Pin.IN)
 
+#clock
+rtc = RTC()
+
+#This line of code only needs to be run once when the device runs this code the very first time ever
+#After which the rtc of the board will be set correctly and can be called directly to get accurate information
+ntptime.time()
+
+h_time = ""
+m_time = ""
+s_time = ""
+
+year = ""
+month = ""
+day = ""
+dof = ""
+
+#adds 0 in front of single digit numbers
+def format_time(time_string):
+  if len(time_string) == 1:
+    return (f"0{time_string}")
+  else:
+    return time_string
+
+#adds space after number if it is single digit
+def format_hour(hour_string):
+    if len(hour_string) == 1:
+        return (f"{hour_string} ")
+    else:
+        return hour_string
+
+#adds the suffix to dates
+def format_date(date_string):
+  if date_string == "1":
+    return date_string + "st"
+  elif date_string == "2":
+    return date_string + "nd"
+  elif date_string == "3":
+    return date_string + "rd"
+  else:
+    return date_string + "th"
+
+#take the integer input from rtc.datetime() and convert to corresponding string
+def format_day(day_int):
+  if day_int == 0:
+    return "Monday"
+  elif day_int == 1:
+    return "Tuesday"
+  elif day_int == 2:
+    return "Wednesday"
+  elif day_int == 3:
+    return "Thursday"
+  elif day_int == 4:
+    return "Friday"
+  elif day_int == 5:
+    return "Saturday"
+  elif day_int == 6:
+    return "Sunday"
+
+#take the integer input from rtc.datetime() and convert to corresponding string
+def format_month(month_int):
+  if month_int == 1:
+    return "Jan"
+  elif month_int == 2:
+    return "Feb"
+  elif month_int == 3:
+    return "Mar"
+  elif month_int == 4:
+    return "Apr"
+  elif month_int == 5:
+    return "May"
+  elif month_int == 6:
+    return "Jun"
+  elif month_int == 7:
+    return "Jul"
+  elif month_int == 8:
+    return "Aug"
+  elif month_int == 9:
+    return "Sep"
+  elif month_int == 10:
+    return "Oct"
+  elif month_int == 11:
+    return "Nov"
+  elif month_int == 12:
+    return "Dec"
+
 try:
     display.init()
-
 except:
     pass
 
-# APPS
+def watch_face():
+    #format the hour, minute and seconds strings
+    h_time = format_hour(str(rtc.datetime()[4]))
+    m_time = format_time(str(rtc.datetime()[5]))
+    s_time = format_time(str(rtc.datetime()[6]))
+
+    #format the year, month, date and day strings
+    year = str(rtc.datetime()[0])
+    month = format_month(rtc.datetime()[1])
+    date = str(rtc.datetime()[2])
+    day = format_day(rtc.datetime()[3])
+    
+    #output the hour and minute
+    display.write(mainfont, h_time + ": " + m_time, 145, 97, color565(200, 200, 200))
+
+    #output the seconds
+    display.text(font3, s_time, 215, 80, color565(170, 170, 255))
+    
+    #output the day, month and date
+    display.text(font1, day, 10, 10, color565(180, 180, 180))
+    display.text(font, month, 50, 110, color565(200, 200, 200))
+    display.write(mainfont, date, 7, 97, color565(170, 170, 255))
+
+#apps
 def get_pages():
    # this is the custom api token that we got through the link below
    #  https://www.notion.com/my-integrations
@@ -67,7 +191,7 @@ def get_pages():
    payload = {"page_size": 100}
    # fetched data
    # making a query to the database
-   response = urequests.post(url,json=payload,headers = headers)
+   response = requests.post(url,json=payload,headers = headers)
    # getting response in json format
    data = response.json()
 
@@ -94,7 +218,7 @@ def notion_api_call():
       # preparing the list of dictionaries for the result
       temp_string = f''
       if TASK_STATUS == 'DONE':
-         temp_string += f'{strike(TASK_NAME)}: {COMMENTS}'
+         temp_string += f'{(TASK_NAME)}: {COMMENTS}'
       else:
          temp_string += f'{TASK_NAME}: {COMMENTS}'
       results.append(temp_string)
@@ -117,138 +241,168 @@ def announcement_api_call():
 def timetable_api_call():
     pass
 
-app_list = [notion_api_call,announcement_api_call,timetable_api_call]
 
+#To check if screen is currently displaying menu or app
+ismenu = False
+isapp = False
 
-#app positions
-app1 = (20, 7, 50, 50)
-app2 = (85, 7, 50, 50)
-app3 = (20, 77, 50, 50)
-app4 = (85, 77, 50, 50)
-
-#all available cursor position list
-cursor_focus = (app1, app2, app3, app4)
-
-#current cursor position
-app_num = 0
-
-#Virenn's Mod's
+#current app in focus and current element within app in focus
+app_index = 0
 within_app_index = 0
+
+#list of all available apps and list of all available elements within app
+app_list = [notion_api_call, announcement_api_call, timetable_api_call]
 within_app_list = []
-#bool to check if the display is currently displaying the menu
-ismenu = True
 
-#button functionality for next/up
+#list of all app positions on screen
+app_positions = ((20, 7, 50, 50), (85, 7, 50, 50), (20, 77, 50, 50))
+
 def up():
-  global app_num
-  global within_app_index
-  if ismenu:
-    if app_num < 3:
-      app_num += 1
-      menu()
-    else:
-      app_num = 0
-      menu()
-  else:
+    global ismenu
+    global isapp
+    global app_index
+    global app_list
+    global within_app_index
+    global within_app_list
 
-    if within_app_index < len(within_app_list) - 1:
-      within_app_index += 1
-    else:
-      pass
+    if ismenu:
+        if app_index < len(app_list):
+            app_index += 1
+            show_menu()
+        else:
+            app_index = 0
+            show_menu()
 
+    if isapp:
+        if within_app_index < len(within_app_list):
+            display.clear()
+            within_app_index += 1
+            show_app_item()
+        else:
+            pass
 
-#button functionality for previous/down
+    elif not ismenu and not isapp:
+        ismenu = True
+        display.clear()
+        show_menu()
+
 def down():
-  global app_num
-  if ismenu:
-    if app_num <= 0:
-      app_num = 0
-    else:
-      app_num -= 1
-      menu()
-  else:
-    if within_app_index > 0:
-      within_app_index -= 1
-    else:
-      pass
+    global ismenu
+    global isapp
+    global app_index
+    global within_app_index
 
- #button functionality to select    
+    if ismenu:
+        if app_index > 0:
+            app_index -= 1
+            show_menu()
+        else:
+            pass
+
+    if isapp:
+        if within_app_index > 0:
+            display.clear()
+            within_app_index -= 1
+            show_app_item()
+        else:
+            pass
+
+    elif not ismenu and not isapp:
+        ismenu = True
+        display.clear()
+        show_menu()
 
 def select():
-  global app_num
-  global ismenu
+    global ismenu
+    global isapp
+    global within_app_list
+    global app_list
+    global app_index
 
-  global within_app_index
-  global within_app_list
+    if ismenu:
+        ismenu = False
+        isapp = True
+        #list of strings returned from app function is stored
+        within_app_list = app_list[app_index]()
+        display.clear()
+        show_app_item()
 
-  if not ismenu:
-    within_app_list = app_list[app_num]()
+    if isapp:
+        pass
 
-def show_item():
-  global within_app_index
-  global within_app_list
+    elif not ismenu and not isapp:
+        ismenu = True
+        display.clear()
+        show_menu()
 
-  display.clear()
-  display.text(font,within_app_list[within_app_index],5,50,color565(255, 255, 255))
-  
-
-    
-#button functionality to go back to main menu
 def home():
-  global ismenu
+    global ismenu
+    global isapp
+    global app_index
+    global within_app_index
 
-  display.clear()
-  ismenu = True
-  menu()
+    if ismenu or isapp:
+        ismenu = False
+        isapp = False
+        app_index = 0
+        within_app_index = 0
+        display.clear()
 
-#main menu function
-def menu():
-  global ismenu
-  global app1
-  global app2
-  global app3
-  global app4
-  global cursor_focus
+    elif not ismenu and not isapp:
+        ismenu = True
+        display.clear()
+        show_menu()
 
-  ismenu = True
 
-  #draws all the apps
-  display.rect(app1[0], app1[1], app1[2], app1[3], color565(170, 170, 170))
-  display.rect(app2[0], app2[1], app2[2], app2[3], color565(170, 170, 170))
-  display.rect(app3[0], app3[1], app3[2], app3[3], color565(170, 170, 170))
-  display.rect(app4[0], app4[1], app4[2], app4[3], color565(170, 170, 170))
+def show_menu():
+    global app_positions
+    global app_index
+    
+    #draw all apps
+    display.rect(app_positions[0][0], app_positions[0][1], app_positions[0][2], app_positions[0][3], color565(170, 170, 170))
+    display.rect(app_positions[1][0], app_positions[1][1], app_positions[1][2], app_positions[1][3], color565(170, 170, 170))
+    display.rect(app_positions[2][0], app_positions[2][1], app_positions[2][2], app_positions[2][3], color565(170, 170, 170))
 
-  #draws the cursor
-  display.rect(cursor_focus[app_num][0], cursor_focus[app_num][1], cursor_focus[app_num][2], cursor_focus[app_num][3], color565(0, 200, 0))
+    #draw cursor
+    display.rect(app_positions[app_index][0], app_positions[app_index][1], app_positions[app_index][2], app_positions[app_index][3], color565(0, 200, 0))
 
-menu()
+def show_app_item():
+    global within_app_index
+    global within_app_list
 
+    display.text(font, within_app_list[within_app_index], 0, 0, color565(200, 200, 200))
+
+#main while loop
 while True:
-    #checks input
-    first = up_button.value()
-    first1 = down_button.value()
-    first2 = select_button.value()
-    first3 = home_button.value()
+    #checks and rejects long press
+    up_first = up_button.value()
+    down_first = down_button.value()
+    select_first = select_button.value()
+    home_first = home_button.value()
   
     time.sleep(0.1)
 
-    second = up_button.value()
-    second1 = down_button.value()
-    second2 = select_button.value()
-    second3 = home_button.value()
-
-    if first and not second:
+    up_second = up_button.value()
+    down_second = down_button.value()
+    select_second = select_button.value()
+    home_second = home_button.value()
+    
+    #checks for inputs
+    if up_first and not up_second:
         print("Up")
         up()
 
-    if first1 and not second1:
+    if down_first and not down_second:
         print("Down")
         down()
 
-    if first2 and not second2:
+    if select_first and not select_second:
         print("Select")
         select()
 
-    if first3 and not second3:
+    if home_first and not home_second:
         print("Home")
         home()
+        
+    elif not ismenu and not isapp:
+        watch_face()

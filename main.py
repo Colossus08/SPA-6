@@ -8,7 +8,7 @@ import st7789py as st7789
 from st7789py import color565
 
 #font imports
-import vga2_bold_16x16 as font
+import vga1_bold_16x16 as font
 import vga1_bold_16x32 as font1
 import vga1_8x8 as font2
 import vga1_8x16 as font3
@@ -18,24 +18,16 @@ import NotoSans as mainfont
 import urequests as requests
 import network
 
-
 #connect to wifi
 sta_if = network.WLAN(network.STA_IF)
 sta_if.active(True)
 wifi_connected = sta_if.isconnected()
 
-while True:
-    try:
-        sta_if.connect('lan_the_man','simplepassword')
-    except OSError as e:
-        print(e)
-        sta_if.disconnect()
-    time.sleep(0.5)
-    if wifi_connected:
-        print("Connected")
-        break
-
-
+if not wifi_connected:
+    sta_if.connect('OnePlus 8T','meowmeowcow')
+elif wifi_connected:
+    print("already connected")
+    
 #initialize display
 spi = SPI(2, baudrate=30000000, polarity=1, phase=1, sck=Pin(18), mosi=Pin(23), miso=Pin(14))
 display = st7789.ST7789(
@@ -48,17 +40,17 @@ display = st7789.ST7789(
     )
 
 #pins for buttons
-up_button = Pin(26, Pin.IN)
-down_button = Pin(27, Pin.IN)
-select_button = Pin(13, Pin.IN)
-home_button = Pin(12, Pin.IN)
-
-#clock
-rtc = RTC()
+up_button = Pin(13, Pin.IN) 
+down_button = Pin(27, Pin.IN) 
+select_button = Pin(33, Pin.IN) 
+home_button = Pin(34, Pin.IN) 
 
 #This line of code only needs to be run once when the device runs this code the very first time ever
 #After which the rtc of the board will be set correctly and can be called directly to get accurate information
-ntptime.time()
+#ntptime.time()
+
+#clock
+rtc = RTC()
 
 h_time = ""
 m_time = ""
@@ -166,7 +158,6 @@ def watch_face():
     display.text(font, month, 50, 110, color565(200, 200, 200))
     display.write(mainfont, date, 7, 97, color565(170, 170, 255))
 
-#apps
 def get_pages():
    # this is the custom api token that we got through the link below
    #  https://www.notion.com/my-integrations
@@ -228,20 +219,42 @@ def notion_api_call():
    return results
 
 def announcement_api_call():
-    endpoint = 'https://192.168.137.1:8000/latest_announcement/CSE/2'
+    endpoint = 'http://192.168.127.198:80/get_announcement/CSE/2'
     res = requests.get(endpoint)
-    res_json = res.text['announcements']
-
-    ret_list = []
-    for ann in res_json:
-      string = f"{ann['content']}\n{ann['priority']} Priority\n{ann['authority']}"
-      ret_list.append(string)    
+    res_json = res.json()['announcements']   
     return res_json
     
 def timetable_api_call():
-    pass
+    day = format_day(rtc.datetime()[3]).lower()
+    #print(day)
+    response = requests.get(f'http://192.168.127.198:70/btech/cse/sy/get/{day}')
+    res=response.json()
+    print(res)
+    return res
 
+def notion_GUI(content, content_list):
+    display.text(font1, "Notion", 5, 7, color565(120, 120, 205))
+    display.text(font3, str(rtc.datetime()[2]) + " " + format_month(rtc.datetime()[1]), 180, 20, color565(180, 180, 180))
+    display.fill_rect(5, 40, 230, 2, color565(75, 75, 75))
+    
+    display.text(font3, "Task " + str(within_app_index + 1) + "/" + str(len(content_list)) + ":", 5, 55, color565(190, 190, 190))
+    display.wrapped_text(font3, content, 15, 75, 230, color565(190, 190, 190))
 
+def announcement_GUI(content):
+  print(content)
+  display.text(font3, content["authority"], 5, 7, color565(170, 170, 255))
+  display.fill_rect(5, 30, 75, 2, color565(170, 170, 255))
+
+  display.wrapped_text(font3, content["content"], 5, 45, 240, color565(200, 200, 200))
+  
+def time_table_GUI(content):
+    display.text(font1, format_day(rtc.datetime()[3]), 5, 7, color565(120, 120, 205))
+    display.text(font3, str(rtc.datetime()[2]) + " " + format_month(rtc.datetime()[1]), 180, 20, color565(180, 180, 180))
+    display.fill_rect(5, 40, 230, 2, color565(75, 75, 75))
+    print(content)
+    display.text(font, content[within_app_index][0], 20, 75, color565(190, 190, 190))
+    display.text(font, content[within_app_index][1], 120, 75, color565(190, 190, 190))
+    
 #To check if screen is currently displaying menu or app
 ismenu = False
 isapp = False
@@ -255,8 +268,9 @@ app_list = [notion_api_call, announcement_api_call, timetable_api_call]
 within_app_list = []
 
 #list of all app positions on screen
-app_positions = ((20, 7, 50, 50), (85, 7, 50, 50), (20, 77, 50, 50))
+app_positions = ((15, 22, 40, 40), (65, 22, 40, 40), (15, 73, 40, 40))
 
+    
 def up():
     global ismenu
     global isapp
@@ -265,8 +279,10 @@ def up():
     global within_app_index
     global within_app_list
 
+    print("up")
+
     if ismenu:
-        if app_index < len(app_list):
+        if app_index < len(app_list) - 1:
             app_index += 1
             show_menu()
         else:
@@ -274,7 +290,7 @@ def up():
             show_menu()
 
     if isapp:
-        if within_app_index < len(within_app_list):
+        if within_app_index < len(within_app_list) - 1:
             display.clear()
             within_app_index += 1
             show_app_item()
@@ -291,6 +307,8 @@ def down():
     global isapp
     global app_index
     global within_app_index
+
+    print("down")
 
     if ismenu:
         if app_index > 0:
@@ -319,6 +337,8 @@ def select():
     global app_list
     global app_index
 
+    print("select")
+
     if ismenu:
         ismenu = False
         isapp = True
@@ -341,6 +361,7 @@ def home():
     global app_index
     global within_app_index
 
+    
     if ismenu or isapp:
         ismenu = False
         isapp = False
@@ -358,51 +379,98 @@ def show_menu():
     global app_positions
     global app_index
     
+    app_names = ("Notion", "Alerts", "Time Table")
+    date_month = str(rtc.datetime()[2]) + " " + format_month(rtc.datetime()[1])
+    box = (120, 35, 105, 100)
+    box_color = color565(60, 60, 145)
+    text_color = color565(255, 255, 255)
+    
+    if app_index == 0:
+        display.fill_rect(box[0], box[1], box[2], box[3], box_color)
+        display.text(font3, app_names[app_index], (int((box[0] + box[2]/2) - (len(app_names[app_index] * font3.WIDTH)/2))), 47, text_color, box_color)
+        
+    if app_index == 1:
+        display.fill_rect(box[0], box[1], box[2], box[3], box_color)
+        display.text(font3, app_names[app_index], (int((box[0] + box[2]/2) - (len(app_names[app_index] * font3.WIDTH)/2))), 47, text_color, box_color)
+        
+    if app_index == 2:
+        display.fill_rect(box[0], box[1], box[2], box[3], box_color)
+        display.text(font3, app_names[app_index], (int((box[0] + box[2]/2) - (len(app_names[app_index] * font3.WIDTH)/2))), 47, text_color, box_color)
+        
+    display.text(font2, date_month, (int((box[0] + box[2]/2) - (len(date_month * font2.WIDTH)/2))), 120, color565(200, 200, 200), box_color)
+    display.text(font2, format_day(rtc.datetime()[3]), (int((box[0] + box[2]/2) - (len(format_day(rtc.datetime()[3]) * font2.WIDTH)/2))), 104, color565(200, 200, 200), box_color)
+    
     #draw all apps
     display.rect(app_positions[0][0], app_positions[0][1], app_positions[0][2], app_positions[0][3], color565(170, 170, 170))
     display.rect(app_positions[1][0], app_positions[1][1], app_positions[1][2], app_positions[1][3], color565(170, 170, 170))
     display.rect(app_positions[2][0], app_positions[2][1], app_positions[2][2], app_positions[2][3], color565(170, 170, 170))
 
     #draw cursor
-    display.rect(app_positions[app_index][0], app_positions[app_index][1], app_positions[app_index][2], app_positions[app_index][3], color565(0, 200, 0))
+    display.rect(app_positions[app_index][0], app_positions[app_index][1], app_positions[app_index][2], app_positions[app_index][3], color565(60, 60, 145))
 
 def show_app_item():
     global within_app_index
     global within_app_list
+   
+    global app_index
 
-    display.text(font, within_app_list[within_app_index], 0, 0, color565(200, 200, 200))
+    #display.text(font, within_app_list[within_app_index], 0, 0, color565(200, 200, 200))
+
+    if app_index == 0:
+        notion_GUI(within_app_list[within_app_index], within_app_list)
+
+    elif app_index == 1:
+        announcement_GUI(within_app_list[within_app_index])
+
+    elif app_index == 2:
+        time_table_GUI(within_app_list)
+
 
 #main while loop
 while True:
-    #checks and rejects long press
-    up_first = up_button.value()
-    down_first = down_button.value()
-    select_first = select_button.value()
-    home_first = home_button.value()
-  
-    time.sleep(0.1)
+    #up_first = up_button.value()
+    #down_first = down_button.value()
+    #select_first = select_button.value()
+    #home_first = home_button.value()
+      
+    #time.sleep(0.8)
 
     up_second = up_button.value()
     down_second = down_button.value()
     select_second = select_button.value()
     home_second = home_button.value()
-    
+            
     #checks for inputs
-    if up_first and not up_second:
-        print("Up")
+    #if up_first and not up_second:
+        #print("Up")
+     #   up()
+
+    #if down_first and not down_second:
+        #print("Down")
+     #   down()
+
+    #if select_first and not select_second:
+        #print("Select")
+     #   select()
+
+    #if home_first and not home_second:
+        #print("Home")
+    #    home()
+                
+    #elif not ismenu and not isapp:
+     #   watch_face()
+     
+    command_string = input("What do you want to do:")
+    if command_string == "up":
         up()
-
-    if down_first and not down_second:
-        print("Down")
+    elif command_string == "down":
         down()
-
-    if select_first and not select_second:
-        print("Select")
+    elif command_string == "select":
         select()
-
-    if home_first and not home_second:
-        print("Home")
+    elif command_string == "home":
         home()
-        
-    elif not ismenu and not isapp:
+    else:
+        pass
+    if not ismenu and not isapp:
         watch_face()
+
